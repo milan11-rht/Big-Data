@@ -1,0 +1,42 @@
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.log4j._
+import org.apache.spark.SparkContext._
+import org.apache.spark.sql._
+import org.apache.spark.sql.functions._
+import org.apache.spark.SparkConf
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.Seconds
+import org.apache.spark.streaming.kafka.KafkaUtils
+import org.apache.spark.streaming.kafka010.{ConsumerStrategies, KafkaUtils,LocationStrategies}
+object realtimepos
+{
+def main(args: Array[String]) {
+val spark : SparkSession = SparkSession.builder().getOrCreate()
+val ssc : StreamingContext = new StreamingContext(spark.sparkContext, Seconds(30))
+val stream = KafkaUtils.createStream(ssc, "ip-20-0-21-196.ec2.internal:2181", "flumeconsumer",
+Map("rtKafkaedureka983959" -> 1))
+stream.foreachRDD(rddRaw => {
+val rdd = rddRaw.map(_._2)
+val td = rdd.map(x => x.split(",")).map(x =>
+pos(x(0),x(1),x(2).toDouble,x(3).toInt,x(4),x(5),x(6).toDouble,x(7).toDouble)).toDF().withColumn("card_id", regexp_replace($"card_id", "[^0-9 ]", "")).withColumn("marchant_id",regexp_replace($"marchant_id", "[^0-9 ]", ""))
+val df = td.filter($"card_id".isNotNull && $"marchant_id".isNotNull && $"timestamp".isNotNull);
+val windowCardSpec = Window.orderBy("timestamp")
+var oldDf = df.withColumn("status",lit("1")).withColumn("row_number",row_number.over(windowCardSpec))
+var i = oldDf.count;
+var j = 1;
+while(j<=i){
+val df2 = oldDf.filter($"row_number" === j).first;
+val status = findStatus(df2(0)+"", df2(8)+"", df2(1)+"", (df2(6)+"").toDouble,
+(df2(7)+"").toDouble, (df2(3)+"").toInt, (df2(2)+"").toDouble);
+println(status);
+oldDf = oldDf.withColumn("status",when($"row_number"===j,status).otherwise($"status"))
+j =j+1;}
+val updatedDf =oldDf.withColumnRenamed("p_type","type").withColumnRenamed("user_id","user_id").withColumn("timestamp",unix_timestamp(from_unixtime($"timestamp","dd/MM/yyyy HH:mm:ss"),"dd/MM/yyyy HH:mm:ss").cast(TimestampType)).select($"card_id",$"user_id",$"marchant_id",$"amount"
+,$"timestamp",$"type",$"transaction_description", $"status")
+val combine = transactions_data.union(updatedDf);
+combine.write.mode("overwrite").saveAsTable("edureka_983959.edureka_983959_transactions_data")
+})
+ssc.start()
+ssc.awaitTermination()
+}
+}

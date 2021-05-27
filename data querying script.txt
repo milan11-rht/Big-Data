@@ -1,0 +1,37 @@
+6. Create a report and capture the business metrics
+
+1) total number of users, merchants, and cards
+
+select count(distinct card_id) as Card_Count , count(distinct user_id) as User_Count ,
+count(distinct merchant_id) as Merchant_Count from edureka_983959_transactions_final;
+
+2) total number of successful and fraud transactions per user, card and merchant
+
+select user_id, status, count( user_id) as cnt
+from edureka_983959_transactions_final
+group by user_id, status;
+
+select card_id, status,count(card_id) as cnt
+from edureka_983959_transactions_final
+group by card_id, status ;
+
+
+select merchant_id, status,count(merchant_id) as cnt
+from edureka_983959_transactions_final
+group by merchant_id, status;
+
+
+3) Total number of lost cards & fraud PoS
+
+a) select count (card_id) as lost_cords from LostCard;
+
+b) select count(distinct card_id) as FraudPoS from pos_blocklist where pos_status_logic =1;
+
+4) Merchants with max & min successful/fraud transactions
+
+select merchant_id, status, min(amount) as min_amt, max(amount) as max_amt from
+edureka_983959_transactions_final group by merchant_id,status;
+
+5) Totals number of successful transactions for top 5 users with maximum transactions
+select user_id,count(*) as cnt from edureka_983959_transactions_final where status
+='Approved' group by user_id order by cnt desc limit 5;

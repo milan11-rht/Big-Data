@@ -1,0 +1,9 @@
+1) Create Kafka topic to process the online Messages:
+
+Step 1) if you want to create a topic, so delete first if existed.
+
+kafka-topics --delete --bootstrap-server ip-20-0-31-221.ec2.internal:9092 --topic rtKafkaedureka983959
+
+Step 2) Create a topic
+
+kafka-topics --create --bootstrap-server ip-20-0-31-221.ec2.internal:9092 --topic rtKafkaedureka983959 --partitions 1 --replication-factor 1

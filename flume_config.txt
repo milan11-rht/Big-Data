@@ -1,0 +1,34 @@
+flume configuration to read real time pos data (rt_pos.conf)
+
+agent1.sources=r1
+agent1.sinks=AvroSink
+agent1.channels=c1
+# source 1
+agent1.sources.r1.type=exec
+agent1.sources.r1.command=hdfs dfs -cat /bigdatapgp/common_folder/project_fraud_detection/realtimedata/real_time_data.txt
+agent1.sources.r1.inputCharset=us-ascii
+agent1.sinks.AvroSink.type=avro
+agent1.sinks.AvroSink.hostname=localhost
+agent1.sinks.AvroSink.port=44444
+agent1.channels.c1.type=memory
+agent1.channels.c1.checkpointDir=/mnt/bigdatapgp/edureka_983959/FraudDetection/flume_agent/checkpoint
+agent1.channels.c1.dataDirs=/mnt/bigdatapgp/edureka_983959/FraudDetection/flume_agent/data
+# Bind the source and sink to the channel
+agent1.sources.r1.channels=c1
+agent1.sinks.AvroSink.channel=c1
+
+3) create a flume config to put the data on Kafka channel (rt_kafka.conf)
+
+agent2.sources=r3
+agent2.channels=c3
+#source 1
+agent2.sources.r3.type = avro
+agent2.sources.r3.bind=localhost
+agent2.sources.r3.port=44444
+# kafka channel
+agent2.channels.c3.type = org.apache.flume.channel.kafka.KafkaChannel
+agent2.channels.c3.kafka.bootstrap.servers =ip-20-0-31-210.ec2.internal:9092
+agent2.channels.c3.topic=rtKafkaedureka983959
+agent2.channels.channel1.kafka.consumer.group.id = flume-consumer
+# Bind the source and sink to the channel
+agent2.sources.r3.channels=c3

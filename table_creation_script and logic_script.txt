@@ -1,0 +1,308 @@
+Hive Commands :
+
+Database edureka_983959 is created in hive, using this database to create project tables.
+
+use edureka_983959;
+
+Steps to clean-up and load transaction data.
+
+drop table if exists stg_transactions_data;
+create table stg_transactions_data (
+card_id bigint ,
+user_id bigint ,
+marchant_id bigint ,
+amount bigint ,
+timestamp bigint ,
+type string ,
+Transaction_description string ,
+status string
+) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+TBLPROPERTIES ("skip.header.line.count"="1") ;
+LOAD DATA INPATH '/user/edureka_983959/FraudDetection/batchdata/transactions.csv'
+OVERWRITE INTO TABLE stg_transactions_data;
+
+
+drop table if exists edureka_983959_transactions_data;
+create table edureka_983959_transactions_data (
+card_id bigint ,
+user_id bigint ,
+marchant_id bigint ,
+amount bigint ,
+timestamp timestamp ,
+type string ,
+Transaction_description string ,
+status string
+);
+insert overwrite table edureka_983959_transactions_data
+select card_id,user_id,marchant_id,amount,from_unixtime(timestamp) as
+timestamp,type,Transaction_description,status
+from stg_transactions_data where card_id is not null and user_id is not null and
+marchant_id is not null;
+drop table stg_transactions_data;
+
+
+Steps to clean-up and load merchant data
+
+
+drop table if exists stg_merchant_data;
+create table stg_merchant_data (
+mid bigint ,
+merchant_id bigint ,
+merchant_type string ,
+status string ,
+country_code string ,
+postal_code string ,
+joined_date bigint,
+updated_date bigint,
+payment_accepted_type string
+) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+TBLPROPERTIES ("skip.header.line.count"="1") ;
+LOAD DATA INPATH
+'/user/edureka_983959/FraudDetection/batchdata/merchant_data.csv' OVERWRITE
+INTO TABLE stg_merchant_data;
+
+
+drop table if exists edureka_983959_merchant_data;
+create table edureka_983959_merchant_data (
+mid bigint ,
+merchant_id bigint ,
+merchant_type string ,
+status string ,
+country_code string ,
+postal_code string ,
+joined_date timestamp,
+updated_date timestamp,
+payment_accepted_type string
+);
+insert overwrite table edureka_983959_merchant_data
+select
+mid,merchant_id,merchant_type,status,country_code,postal_code,from_unixtime(joined_dat
+e) as joined_date,from_unixtime(updated_date) as updated_date,payment_accepted_type
+from stg_merchant_data where merchant_id is not null;
+drop table stg_merchant_data;
+
+
+Steps to clean-up and load bureau data.
+
+
+drop table if exists stg_bureau_data;
+create table stg_bureau_data (
+id bigint,user_id bigint,dob string,active_cards int,card_taken int,defaults int,currency
+string,provider string,credit_score decimal,
+timestamp bigint,status1 string,status2 string,status3 string,status4 string,status5
+string,status6 string,status7 string,
+status8 string,status9 string,status10 string,status11 string,status12 string,status13
+string,status14 string,status15 string,
+status16 string,status17 string,status18 string,status19 string,status20 string
+) ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+TBLPROPERTIES ("skip.header.line.count"="1") ;
+LOAD DATA INPATH '/user/edureka_983959/FraudDetection/batchdata/bureau_data.csv'
+OVERWRITE INTO TABLE stg_bureau_data;
+
+
+
+drop table if exists edureka_983959_bureau_data;
+create table edureka_983959_bureau_data (
+id bigint,user_id bigint,dob date,active_cards int,card_taken int,defaults int,currency
+string,provider string,credit_score decimal,
+timestamp timestamp,status1 string,status2 string,status3 string,status4 string,status5
+string,status6 string,status7 string,
+status8 string,status9 string,status10 string,status11 string,status12 string,status13
+string,status14 string,status15 string,
+status16 string,status17 string,status18 string,status19 string,status20 string
+);
+insert into edureka_983959_bureau_data
+select id,user_id,cast(to_date(from_unixtime(unix_timestamp(dob,'dd-MM-yyyy'))) as
+date),active_cards,card_taken,defaults,currency,provider,credit_score,from_unixtime(times
+tamp),status1,status2,status3,status4,status5,status6,status7,status8,status9,status10,statu
+s11,status12,status13,status14,status15,status16,status17,status18,status19,status20 from
+stg_bureau_data where user_id is not null;
+drop table stg_bureau_data;
+
+
+Steps to load zipcode data.
+
+drop table if exists edureka_983959_zipcodes_data;
+create table edureka_983959_zipcodes_data(
+country_code string,
+postal_code string,
+place_name string,
+admin_name1 string,
+admin_code1 string,
+admin_name2 string,
+admin_code2 string,
+admin_name3 string,
+admin_code3 string,
+latitude double,
+longitude double,
+accuracy int)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+TBLPROPERTIES ("skip.header.line.count"="1") ;
+LOAD DATA INPATH '/user/edureka_983959/FraudDetection/batchdata/zipcodes.txt'
+OVERWRITE INTO TABLE edureka_983959_zipcodes_data;
+
+
+Creating a base table by joining batch data to identify the fraud transactions.
+
+drop table ft_logic;
+Create Table ft_logic as
+select a.*,b.country_code,b.postal_code,c.latitude,c.longitude,d.credit_score
+from edureka_983959_transactions_data a, edureka_983959_merchant_data b ,
+edureka_983959_zipcodes_data c, edureka_983959_bureau_data d
+where (a.marchant_id) = (b.merchant_id)
+and TRIM(b.country_code) = TRIM(c.country_code)
+and TRIM(b.postal_code) = TRIM(c.postal_code)
+and a.user_id = d.user_id
+and a.timestamp IS NOT NULL
+and a.user_id is NOT NULL
+and a.card_id is NOT NULL;
+
+3. Implement logic to classify the transaction, whether it is a fraud or genuine
+transaction
+
+
+drop table ft_logic_ts;
+Create Table ft_logic_ts AS
+select a.*,
+LAG(a.latitude)OVER(PARTITION BY a.card_id ORDER BY a.timestamp) lag_latitude,
+LAG(a.longitude)OVER(PARTITION BY a.user_id ORDER BY a.timestamp) lag_longitude,
+LAG(a.timestamp)OVER(PARTITION BY a.card_id ORDER BY a.timestamp) lag_timestamp
+from ft_logic a ;
+
+
+a) Calculation logic for Distance over time (DoT):
+
+drop table DistanceOverTime;
+CREATE TABLE DistanceOverTime as
+select a.* , 2*asin(
+sqrt(
+cos(radians(latitude)) *
+cos(radians(lag_latitude)) *
+pow(sin(radians((longitude - lag_longitude)/2)), 2)+ pow(sin(radians((latitude - lag_latitude)/2)), 2)
+)
+) * 6371 as distance_km,
+(unix_timestamp(timestamp) - unix_timestamp(lag_timestamp))/60 as trans_tm_diff_in_minute
+from ft_logic_ts a ;
+
+drop table DistanceOverTime_Amount;
+create table DistanceOverTime_Amount as
+select a.*,AVG(amount) OVER (PARTITION BY card_id ORDER BY a.timestamp desc ROWS BETWEEN 5 PRECEDING AND CURRENT ROW) avg_amount,
+STDDEV(amount) OVER (PARTITION BY card_id ORDER BY a.timestamp desc ROWS
+BETWEEN 5 PRECEDING AND CURRENT ROW) stddev_amount
+from DistanceOverTime a ;
+
+++++++++++++++++++++++++++++++++++12-05 +++++++++++++++++end+++++++++++++++++++++++++++++++
+b) UTL & CTL is derived using the following formula:
+
+
+drop table DistanceOverTime_UtlCtl;
+create table DistanceOverTime_UtlCtl as
+select a.*,
+(2*stddev_amount+avg_amount) as UTL,
+(5*stddev_amount+avg_amount) as CTL
+from DistanceOverTime_Amount a ;
+
+
+drop table DistanceOverTime_TL;
+Create Table DistanceOverTime_TL AS
+select t.*,
+(CASE WHEN ((t.distance_km/t.trans_tm_diff_in_minute)>13 OR (t.amount > t.CTL) or
+(t.credit_score < 250)) THEN 'Suspecious'
+WHEN t.amount between t.UTL and t.CTL THEN 'Approval Pending' WHEN t.amount <
+t.UTL OR (1=1) THEN 'Approved' END ) as Status_utl_ctl
+from DistanceOverTime_UtlCtl t ;
+
+
+Create a transaction table and insert the transaction data with the updated status
+column.
+
+
+drop table edureka_983959_transactions_final;
+create table edureka_983959_transactions_final as
+select card_id ,user_id ,marchant_id as merchant_id ,amount , timestamp , type
+,transaction_description as trans_desc , status_utl_ctl as Status
+from DistanceOverTime_TL ;
+
+
+4. Implement the logic to identify the lost cards and create a table to store this
+information for quick lookup
+
+
+drop table LostCardStatus;
+create table LostCardStatus as
+select a.*,
+SUM(case when status = 'Suspecious' THEN 1 else 0 END) OVER (PARTITION BY card_id
+ORDER BY a.timestamp desc ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) as
+card_status from edureka_983959_transactions_final a;
+CREATE TABLE LostCard AS
+SELECT distinct CARD_ID , 'Y' as lost_card_status
+FROM LostCardStatus where card_status =1 ;
+
+
+5. Implement the logic to identify the Fraud-PoS systems and create a table to
+store this information for quick lookup
+
+
+DROP TABLE IF EXISTS edureka_983959_card_blocklist;
+CREATE TABLE edureka_983959_card_blocklist AS
+SELECT CARD_ID ,unix_timestamp() as trans_ts
+from LostCard;
+
+
+DROP TABLE IF EXISTS pos_realtime;
+create table pos_realtime (
+card_id bigint ,
+merchant_id bigint ,
+amount bigint ,
+trans_ts bigint ,
+type string ,
+trans_desc string ,
+latitude double,
+longitude double
+) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde' STORED AS
+TEXTFILE;
+LOAD DATA INPATH
+'IndustryProject/real_time_data.txt'
+OVERWRITE INTO TABLE pos_realtime;
+
+
+a ) Implement the logic to identify the lost cards and create a table to store this
+information for quick lookup
+
+
+DROP TABLE IF EXISTS edureka_983959_pos_transaction;
+Create TABLE edureka_983959_pos_transaction
+AS select * from pos_realtime
+where card_id is not null
+and merchant_id is not null ;
+
+CREATE TABLE pos_fraud_transactions AS
+SELECT * FROM edureka_983959_pos_transaction where 1=2 ;
+CREATE TABLE pos_valid_transactions AS
+SELECT * FROM edureka_983959_pos_transaction where 1=2 ;
+Create Table pos_blocklist_data AS
+select a.*,
+(CASE WHEN (a.distance_km/a.trans_tm_diff_in_minute)>13 and credit_score < 250 THEN
+'DOT' ELSE 'OTHERS' END ) pos_status from DistanceOverTime a;
+
+
+DROP TABLE IF EXISTS pos_blocklist;
+create table pos_blocklist as
+select a.* ,
+SUM(case when POS_STATUS = 'DOT' THEN 1 else 0 END) OVER (PARTITION BY card_id
+ORDER BY a.timestamp desc ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)
+POS_STATUS_LOGIC
+from pos_blocklist_data a ;
+
+
+drop table IF EXISTS pos_blocklist_final;
+create table pos_blocklist_final as
+select card_id ,user_id ,marchant_id as merchant_id ,amount , timestamp as trans_ts , type
+,transaction_description as trans_desc , 'Suspecious' as Status
+from pos_blocklist
+where POS_STATUS_LOGIC =1 ;
+
+DROP TABLE IF EXISTS edureka_983959_pos_blocklist;
+CREATE TABLE edureka_983959_pos_blocklist
+AS SELECT DISTINCT CARD_ID , Status
+from pos_blocklist_final;
